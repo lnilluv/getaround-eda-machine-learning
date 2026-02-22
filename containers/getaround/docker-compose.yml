@@ -13,7 +13,6 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - BACKEND_STORE_URI=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysqldb:3306/${MYSQL_DATABASE}
     depends_on:
       - postgresdb
     labels:
@@ -100,34 +99,13 @@ services:
       #volumes:
       #- ./wait-for-it.sh:/tmp/wait-for-it.sh
 
-  mysqldb:
-    restart: always
-    # image: mariadb
-    # image: mysql/mysql-server:8.0
-    image: mysql:8.0
-    # build:
-    #   context: .
-    #   dockerfile: app/mysqldb/Dockerfile
-    container_name: mlflow_db
-    # command: tail -F anything
-    expose:
-      - 3306
-    environment:
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-    volumes:
-      - getaround_dbdata:/var/lib/mysql:rw
-      # - ./run/:/var/run/mysqld:rw
-
   mlflow:
     restart: always
     build: ./app/mlflow
     container_name: mlflow_server
+    user: "0:0"
     depends_on:
       - mc
-      - mysqldb
     expose:
       - 5000
     environment:
@@ -136,7 +114,9 @@ services:
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-    command: mlflow server --backend-store-uri mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysqldb:3306/${MYSQL_DATABASE} --default-artifact-root s3://mlflow/ --artifacts-destination s3://mlflow/ --serve-artifacts --host 0.0.0.0
+    volumes:
+      - mlflow_data:/mlflow
+    command: mlflow server --backend-store-uri sqlite:////mlflow/mlflow.db --default-artifact-root s3://mlflow/ --artifacts-destination s3://mlflow/ --serve-artifacts --host 0.0.0.0 --workers 1
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mlflow.rule=Host(`$MLFLOW`)"
@@ -172,7 +152,7 @@ services:
   #     - ./app/nginx/data/:/usr/share/nginx/html/
 
 volumes:
-  getaround_dbdata:
+  mlflow_data:
   minio_data:
   postgres_data_prod:
   letsencrypt:

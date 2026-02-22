@@ -1,4 +1,5 @@
 import asyncpg
+import asyncio
 
 
 class AsyncpgUserGateway:
@@ -6,9 +7,20 @@ class AsyncpgUserGateway:
         self._db_url = db_url
         self._pool: asyncpg.Pool | None = None
 
-    async def connect(self) -> None:
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(self._db_url)
+    async def connect(self, retries: int = 10, delay_seconds: float = 1.0) -> None:
+        if self._pool is not None:
+            return
+
+        last_error: Exception | None = None
+        for _ in range(retries):
+            try:
+                self._pool = await asyncpg.create_pool(self._db_url)
+                return
+            except Exception as exc:
+                last_error = exc
+                await asyncio.sleep(delay_seconds)
+
+        raise RuntimeError("Failed to connect to Postgres after retries") from last_error
 
     async def disconnect(self) -> None:
         if self._pool is not None:
